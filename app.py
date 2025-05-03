@@ -7,8 +7,8 @@ import time
 import re
 from collections import Counter
 
-CLIENT_ID = '1ca3b8b35e844555a718cd928a0a964e'
-CLIENT_SECRET = '62774e39c57141f7870ccf312213f1b5'
+CLIENT_ID = st.secrets["spotify"]["client_id"]
+CLIENT_SECRET = st.secrets["spotify"]["client_secret"]
 
 @st.cache_data
 def obtener_datos():
