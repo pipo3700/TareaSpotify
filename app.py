@@ -7,13 +7,11 @@ import time
 import re
 from collections import Counter
 
-# --- Autenticación Spotify ---
 CLIENT_ID = '1ca3b8b35e844555a718cd928a0a964e'
 CLIENT_SECRET = '62774e39c57141f7870ccf312213f1b5'
 
 @st.cache_data
 def obtener_datos():
-    # Obtener token
     auth_response = requests.post('https://accounts.spotify.com/api/token', {
         'grant_type': 'client_credentials',
         'client_id': CLIENT_ID,
@@ -23,22 +21,25 @@ def obtener_datos():
     headers = {'Authorization': f'Bearer {access_token}'}
     BASE_URL = 'https://api.spotify.com/v1/'
 
-    # Buscar artista
-    artist_name = 'The Smiths'
+    # Buscar artista Radiohead
     search_url = BASE_URL + 'search'
-    params = {'q': artist_name, 'type': 'artist'}
+    params = {'q': 'Radiohead', 'type': 'artist'}
     response = requests.get(search_url, headers=headers, params=params)
     artist_id = response.json()['artists']['items'][0]['id']
 
-    # Obtener álbumes
+    # Álbumes de estudio oficiales
+    studio_albums = [
+        'Pablo Honey', 'The Bends', 'OK Computer', 'Kid A', 'Amnesiac',
+        'Hail to the Thief', 'In Rainbows', 'The King of Limbs', 'A Moon Shaped Pool'
+    ]
+
     r = requests.get(BASE_URL + f'artists/{artist_id}/albums', headers=headers, params={
         'include_groups': 'album',
         'limit': 50
     })
     albums_raw = r.json()['items']
 
-    # Filtrar álbumes de estudio oficiales
-    studio_albums = ['The Smiths', 'Meat Is Murder', 'The Queen Is Dead', 'Strangeways, Here We Come']
+    # Elegir versión más antigua por nombre
     filtered_albums = {}
     for album in albums_raw:
         name = album['name']
@@ -59,7 +60,7 @@ def obtener_datos():
     lyrics_data = []
     for track in tracks:
         name = re.sub(r'\(.*?\)|- .*', '', track['track_name']).strip()
-        r = requests.get(f'{base_lyrics_url}/The Smiths/{name}')
+        r = requests.get(f'{base_lyrics_url}/Radiohead/{name}')
         lyrics = r.json().get('lyrics', '') if r.status_code == 200 else ''
         lyrics_data.append({
             'album': track['album'],
@@ -70,38 +71,37 @@ def obtener_datos():
 
     return pd.DataFrame(lyrics_data)
 
-# --- Streamlit App ---
-st.title("Análisis de Letras de The Smiths 🎸")
+# --------------------- Streamlit APP ---------------------
 
-# Botón para cargar datos
-if st.button("Cargar datos y generar análisis"):
-    with st.spinner("Cargando datos desde Spotify y lyrics.ovh..."):
+st.title("🎸 Análisis de Letras de Radiohead")
+
+if st.button("Cargar y analizar letras"):
+    with st.spinner("Cargando información..."):
         lyrics_df = obtener_datos()
 
-    # Selector de álbum
-    album_selected = st.selectbox("Selecciona un álbum", lyrics_df['album'].unique())
-    df_album = lyrics_df[lyrics_df['album'] == album_selected]
-
-    if df_album.empty or df_album['lyrics'].str.len().sum() == 0:
-        st.warning("No hay letras disponibles para este álbum.")
+    if lyrics_df.empty:
+        st.error("No se encontraron letras. Intenta más tarde.")
     else:
-        all_lyrics = ' '.join(df_album['lyrics'].dropna()).lower()
+        all_lyrics = ' '.join(lyrics_df['lyrics'].dropna()).lower()
         stopwords = set(['the', 'and', 'to', 'a', 'of', 'in', 'i', 'you', 'my', 'it', 'on', 'me'])
         words = [word.strip('.,!?"()') for word in all_lyrics.split() if word not in stopwords]
         word_freq = Counter(words)
 
-        # Nube de palabras
-        st.subheader("🎨 Nube de Palabras")
+        st.subheader("☁️ Nube de Palabras")
         wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(words))
         fig_wc, ax = plt.subplots(figsize=(10, 5))
         ax.imshow(wordcloud, interpolation='bilinear')
         ax.axis('off')
         st.pyplot(fig_wc)
 
-        # Top palabras
         st.subheader("📊 Top 10 Palabras más Frecuentes")
         common_words_df = pd.DataFrame(word_freq.most_common(10), columns=['word', 'count'])
         fig_bar, ax2 = plt.subplots(figsize=(8, 4))
-        common_words_df.plot(kind='bar', x='word', y='count', ax=ax2, legend=False)
-        ax2.set_title('Frecuencia de Palabras')
+        ax2.bar(common_words_df['word'], common_words_df['count'])
+        ax2.set_xlabel("Palabra")
+        ax2.set_ylabel("Frecuencia")
+        ax2.set_title("Top 10 palabras")
         st.pyplot(fig_bar)
+
+        st.subheader("📋 Tabla de canciones con letras disponibles")
+        st.dataframe(lyrics_df[['album', 'track_name', 'lyrics']])
